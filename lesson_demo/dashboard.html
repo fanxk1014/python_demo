@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>研发效能分析看板</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 100%);
+            color: #e6e6e6;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: linear-gradient(90deg, #1e3a5f 0%, #2d5a87 100%);
+            padding: 20px 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .header .subtitle {
+            font-size: 14px;
+            color: #a0c4e8;
+            margin-top: 5px;
+        }
+        
+        .dashboard {
+            padding: 30px 40px;
+        }
+        
+        /* KPI卡片 */
+        .kpi-section {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .kpi-card {
+            background: linear-gradient(145deg, #252b3d 0%, #1e2435 100%);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #2d3748;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        }
+        
+        .kpi-card .label {
+            font-size: 12px;
+            color: #8892a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .kpi-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #fff;
+            margin: 10px 0;
+        }
+        
+        .kpi-card .change {
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .kpi-card .change.positive {
+            color: #4ade80;
+        }
+        
+        .kpi-card .change.negative {
+            color: #f87171;
+        }
+        
+        /* 图表区域 */
+        .chart-section {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+        
+        .chart-card {
+            background: linear-gradient(145deg, #252b3d 0%, #1e2435 100%);
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid #2d3748;
+        }
+        
+        .chart-card.col-6 {
+            grid-column: span 6;
+        }
+        
+        .chart-card.col-4 {
+            grid-column: span 4;
+        }
+        
+        .chart-card.col-12 {
+            grid-column: span 12;
+        }
+        
+        .chart-card h3 {
+            font-size: 16px;
+            color: #e6e6e6;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .chart-card h3::before {
+            content: '';
+            width: 4px;
+            height: 18px;
+            background: linear-gradient(180deg, #3b82f6 0%, #8b5cf6 100%);
+            border-radius: 2px;
+        }
+        
+        .chart-container {
+            width: 100%;
+            height: 300px;
+        }
+        
+        .chart-container.large {
+            height: 400px;
+        }
+        
+        /* 表格样式 */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        .data-table th,
+        .data-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #2d3748;
+        }
+        
+        .data-table th {
+            color: #8892a0;
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        
+        .data-table td {
+            color: #e6e6e6;
+        }
+        
+        .data-table tr:hover td {
+            background: rgba(59, 130, 246, 0.1);
+        }
+        
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        
+        .badge-success {
+            background: rgba(74, 222, 128, 0.15);
+            color: #4ade80;
+        }
+        
+        .badge-warning {
+            background: rgba(251, 191, 36, 0.15);
+            color: #fbbf24;
+        }
+        
+        .badge-danger {
+            background: rgba(248, 113, 113, 0.15);
+            color: #f87171;
+        }
+        
+        /* 团队分布 */
+        .team-stats {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px 0;
+        }
+        
+        .team-item {
+            text-align: center;
+        }
+        
+        .team-item .number {
+            font-size: 36px;
+            font-weight: 700;
+            color: #3b82f6;
+        }
+        
+        .team-item .label {
+            font-size: 13px;
+            color: #8892a0;
+            margin-top: 5px;
+        }
+        
+        /* 响应式 */
+        @media (max-width: 1200px) {
+            .kpi-section {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .chart-card.col-6,
+            .chart-card.col-4 {
+                grid-column: span 12;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .kpi-section {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .dashboard {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>研发效能分析看板</h1>
+        <div class="subtitle">50人研发团队 · 2025年Q1 · 数据驱动效能提升</div>
+    </div>
+    
+    <div class="dashboard">
+        <!-- KPI卡片 -->
+        <div class="kpi-section">
+            <div class="kpi-card">
+                <div class="label">需求交付周期</div>
+                <div class="value">12.5<span style="font-size:16px">天</span></div>
+                <div class="change positive">
+                    <span>↓</span> 8% 环比优化
+                </div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">代码提交频率</div>
+                <div class="value">8.5<span style="font-size:16px">次/周</span></div>
+                <div class="change positive">
+                    <span>↑</span> 12% 环比提升
+                </div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">缺陷密度</div>
+                <div class="value">3.1<span style="font-size:16px">个/千行</span></div>
+                <div class="change positive">
+                    <span>↓</span> 15% 环比降低
+                </div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">测试覆盖率</div>
+                <div class="value">78<span style="font-size:16px">%</span></div>
+                <div class="change positive">
+                    <span>↑</span> 5% 环比提升
+                </div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">发布成功率</div>
+                <div class="value">98<span style="font-size:16px">%</span></div>
+                <div class="change positive">
+                    <span>↑</span> 2% 环比提升
+                </div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">系统可用性</div>
+                <div class="value">99.95<span style="font-size:16px">%</span></div>
+                <div class="change positive">
+                    <span>→</span> 保持稳定
+                </div>
+            </div>
+        </div>
+        
+        <!-- 图表区域 -->
+        <div class="chart-section">
+            <!-- 迭代趋势 -->
+            <div class="chart-card col-12">
+                <h3>迭代效能趋势分析</h3>
+                <div id="sprintTrendChart" class="chart-container large"></div>
+            </div>
+            
+            <!-- 团队构成 + 职级分布 -->
+            <div class="chart-card col-4">
+                <h3>团队人员构成</h3>
+                <div id="teamStructureChart" class="chart-container"></div>
+            </div>
+            
+            <div class="chart-card col-4">
+                <h3>职级分布</h3>
+                <div id="levelDistributionChart" class="chart-container"></div>
+            </div>
+            
+            <div class="chart-card col-4">
+                <h3>各方向人数占比</h3>
+                <div id="deptDistributionChart" class="chart-container"></div>
+            </div>
+            
+            <!-- 研发阶段效能 -->
+            <div class="chart-card col-6">
+                <h3>研发各阶段效能指标</h3>
+                <div id="stageMetricsChart" class="chart-container"></div>
+            </div>
+            
+            <div class="chart-card col-6">
+                <h3>代码质量指标</h3>
+                <div id="codeQualityChart" class="chart-container"></div>
+            </div>
+            
+            <!-- 个人效能Top10 -->
+            <div class="chart-card col-6">
+                <h3>个人效能Top10（代码提交次数）</h3>
+                <div id="personalEfficiencyChart" class="chart-container"></div>
+            </div>
+            
+            <div class="chart-card col-6">
+                <h3>部门效能对比</h3>
+                <div id="deptComparisonChart" class="chart-container"></div>
+            </div>
+            
+            <!-- 测试与发布 -->
+            <div class="chart-card col-6">
+                <h3>测试执行情况</h3>
+                <div id="testExecutionChart" class="chart-container"></div>
+            </div>
+            
+            <div class="chart-card col-6">
+                <h3>发布统计</h3>
+                <div id="releaseChart" class="chart-container"></div>
+            </div>
+            
+            <!-- 项目进展 -->
+            <div class="chart-card col-12">
+                <h3>项目进展概览</h3>
+                <div id="projectProgressChart" class="chart-container"></div>
+            </div>
+            
+            <!-- 效能热力图 -->
+            <div class="chart-card col-12">
+                <h3>研发效能热力图（按周统计）</h3>
+                <div id="efficiencyHeatmapChart" class="chart-container large"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 图表主题色
+        const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f97316', '#84cc16'];
+        
+        // 1. 迭代趋势图
+        const sprintTrendChart = echarts.init(document.getElementById('sprintTrendChart'));
+        sprintTrendChart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+            legend: { data: ['计划需求', '完成需求', '计划故事点', '完成故事点', '缺陷数'], textStyle: { color: '#8892a0' }, top: 0 },
+            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'category', data: ['迭代1', '迭代2', '迭代3', '迭代4', '迭代5', '迭代6'], axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' } },
+            yAxis: [
+                { type: 'value', name: '数量', axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' }, splitLine: { lineStyle: { color: '#2d3748' } } },
+                { type: 'value', name: '故事点', axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' }, splitLine: { show: false } }
+            ],
+            series: [
+                { name: '计划需求', type: 'bar', data: [25, 28, 22, 30, 26, 25], itemStyle: { color: '#3b82f6', opacity: 0.6 } },
+                { name: '完成需求', type: 'bar', data: [23, 26, 20, 28, 25, 24], itemStyle: { color: '#3b82f6' } },
+                { name: '计划故事点', type: 'line', yAxisIndex: 1, data: [150, 165, 140, 175, 160, 155], lineStyle: { color: '#10b981', type: 'dashed' }, itemStyle: { color: '#10b981' } },
+                { name: '完成故事点', type: 'line', yAxisIndex: 1, data: [142, 158, 132, 168, 155, 148], lineStyle: { color: '#10b981' }, itemStyle: { color: '#10b981' }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(16, 185, 129, 0.3)' }, { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }] } } },
+                { name: '缺陷数', type: 'line', data: [52, 48, 55, 45, 50, 42], lineStyle: { color: '#ef4444' }, itemStyle: { color: '#ef4444' } }
+            ]
+        });
+        
+        // 2. 团队构成饼图
+        const teamStructureChart = echarts.init(document.getElementById('teamStructureChart'));
+        teamStructureChart.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { orient: 'vertical', left: 'left', textStyle: { color: '#8892a0' } },
+            series: [{
+                type: 'pie',
+                radius: ['40%', '70%'],
+                avoidLabelOverlap: false,
+                itemStyle: { borderRadius: 10, borderColor: '#1e2435', borderWidth: 2 },
+                label: { show: true, color: '#e6e6e6' },
+                data: [
+                    { value: 15, name: '前端', itemStyle: { color: '#3b82f6' } },
+                    { value: 20, name: '后端', itemStyle: { color: '#8b5cf6' } },
+                    { value: 15, name: '客户端', itemStyle: { color: '#10b981' } }
+                ]
+            }]
+        });
+        
+        // 3. 职级分布
+        const levelDistributionChart = echarts.init(document.getElementById('levelDistributionChart'));
+        levelDistributionChart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'category', data: ['初级', '中级', '高级', '专家'], axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' } },
+            yAxis: { type: 'value', axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' }, splitLine: { lineStyle: { color: '#2d3748' } } },
+            series: [{
+                type: 'bar',
+                data: [
+                    { value: 13, itemStyle: { color: '#06b6d4' } },
+                    { value: 22, itemStyle: { color: '#3b82f6' } },
+                    { value: 11, itemStyle: { color: '#8b5cf6' } },
+                    { value: 4, itemStyle: { color: '#f59e0b' } }
+                ],
+                barWidth: '50%',
+                label: { show: true, position: 'top', color: '#e6e6e6' }
+            }]
+        });
+        
+        // 4. 各方向人数占比
+        const deptDistributionChart = echarts.init(document.getElementById('deptDistributionChart'));
+        deptDistributionChart.setOption({
+            tooltip: { trigger: 'item' },
+            series: [{
+                type: 'pie',
+                radius: '70%',
+                roseType: 'radius',
+                itemStyle: { borderRadius: 5 },
+                label: { color: '#e6e6e6' },
+                data: [
+                    { value: 20, name: '后端 40%', itemStyle: { color: '#8b5cf6' } },
+                    { value: 15, name: '前端 30%', itemStyle: { color: '#3b82f6' } },
+                    { value: 15, name: '客户端 30%', itemStyle: { color: '#10b981' } }
+                ]
+            }]
+        });
+        
+        // 5. 研发各阶段效能指标
+        const stageMetricsChart = echarts.init(document.getElementById('stageMetricsChart'));
+        stageMetricsChart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            radar: {
+                indicator: [
+                    { name: '需求评审通过率', max: 100 },
+                    { name: '方案评审通过率', max: 100 },
+                    { name: '构建成功率', max: 100 },
+                    { name: '测试通过率', max: 100 },
+                    { name: '发布成功率', max: 100 },
+                    { name: '系统可用性', max: 100 }
+                ],
+                splitArea: { areaStyle: { color: ['rgba(59, 130, 246, 0.05)', 'rgba(59, 130, 246, 0.1)'] } },
+                axisLine: { lineStyle: { color: '#2d3748' } },
+                splitLine: { lineStyle: { color: '#2d3748' } },
+                name: { textStyle: { color: '#8892a0' } }
+            },
+            series: [{
+                type: 'radar',
+                data: [{
+                    value: [92, 95, 95, 96, 98, 99.95],
+                    name: '当前季度',
+                    areaStyle: { color: 'rgba(59, 130, 246, 0.3)' },
+                    lineStyle: { color: '#3b82f6' },
+                    itemStyle: { color: '#3b82f6' }
+                }, {
+                    value: [88, 92, 92, 93, 96, 99.9],
+                    name: '上季度',
+                    areaStyle: { color: 'rgba(139, 92, 246, 0.1)' },
+                    lineStyle: { color: '#8b5cf6', type: 'dashed' },
+                    itemStyle: { color: '#8b5cf6' }
+                }]
+            }]
+        });
+        
+        // 6. 代码质量指标
+        const codeQualityChart = echarts.init(document.getElementById('codeQualityChart'));
+        codeQualityChart.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['当前值', '目标值', '行业均值'], textStyle: { color: '#8892a0' }, bottom: 0 },
+            radar: {
+                indicator: [
+                    { name: 'CR通过率', max: 100 },
+                    { name: '规范合规', max: 100 },
+                    { name: '重复率控制', max: 100 },
+                    { name: '文档完整', max: 100 },
+                    { name: '测试覆盖', max: 100 }
+                ],
+                splitArea: { areaStyle: { color: ['rgba(16, 185, 129, 0.05)', 'rgba(16, 185, 129, 0.1)'] } },
+                axisLine: { lineStyle: { color: '#2d3748' } },
+                splitLine: { lineStyle: { color: '#2d3748' } },
+                name: { textStyle: { color: '#8892a0' } }
+            },
+            series: [{
+                type: 'radar',
+                data: [
+                    { value: [94, 88, 94, 85, 78], name: '当前值', areaStyle: { color: 'rgba(16, 185, 129, 0.3)' }, lineStyle: { color: '#10b981' }, itemStyle: { color: '#10b981' } },
+                    { value: [95, 90, 95, 90, 80], name: '目标值', lineStyle: { color: '#f59e0b', type: 'dashed' }, itemStyle: { color: '#f59e0b' } },
+                    { value: [90, 85, 90, 80, 70], name: '行业均值', lineStyle: { color: '#6b7280', type: 'dotted' }, itemStyle: { color: '#6b7280' } }
+                ]
+            }]
+        });
+        
+        // 7. 个人效能Top10
+        const personalEfficiencyChart = echarts.init(document.getElementById('personalEfficiencyChart'));
+        personalEfficiencyChart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            grid: { left: '3%', right: '8%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'value', axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' }, splitLine: { lineStyle: { color: '#2d3748' } } },
+            yAxis: { type: 'category', data: ['后端专家2', '后端高级4', '前端高级3', '后端中级9', '客户端专家1', '后端高级3', '前端中级7', '客户端高级4', '后端中级5', '前端高级1'].reverse(), axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#e6e6e6' } },
+            series: [{
+                type: 'bar',
+                data: [142, 138, 135, 132, 128, 125, 122, 118, 115, 112].reverse(),
+                itemStyle: { 
+                    color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#3b82f6' }, { offset: 1, color: '#8b5cf6' }] },
+                    borderRadius: [0, 4, 4, 0]
+                },
+                label: { show: true, position: 'right', color: '#e6e6e6' }
+            }]
+        });
+        
+        // 8. 部门效能对比
+        const deptComparisonChart = echarts.init(document.getElementById('deptComparisonChart'));
+        deptComparisonChart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            legend: { data: ['代码提交', 'Bug修复', '需求完成', '文档产出'], textStyle: { color: '#8892a0' }, bottom: 0 },
+            grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+            xAxis: { type: 'category', data: ['前端', '后端', '客户端'], axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' } },
+            yAxis: { type: 'value', axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' }, splitLine: { lineStyle: { color: '#2d3748' } } },
+            series: [
+                { name: '代码提交', type: 'bar', data: [1150, 1680, 1017], itemStyle: { color: '#3b82f6' } },
+                { name: 'Bug修复', type: 'bar', data: [225, 315, 180], itemStyle: { color: '#10b981' } },
+                { name: '需求完成', type: 'bar', data: [120, 175, 105], itemStyle: { color: '#8b5cf6' } },
+                { name: '文档产出', type: 'bar', data: [45, 68, 42], itemStyle: { color: '#f59e0b' } }
+            ]
+        });
+        
+        // 9. 测试执行情况
+        const testExecutionChart = echarts.init(document.getElementById('testExecutionChart'));
+        testExecutionChart.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { orient: 'vertical', left: 'left', textStyle: { color: '#8892a0' } },
+            series: [{
+                type: 'pie',
+                radius: ['50%', '70%'],
+                center: ['60%', '50%'],
+                avoidLabelOverlap: false,
+                label: { show: true, formatter: '{b}\n{c} ({d}%)', color: '#e6e6e6' },
+                data: [
+                    { value: 3890, name: '自动化用例', itemStyle: { color: '#10b981' } },
+                    { value: 1344, name: '手动用例', itemStyle: { color: '#3b82f6' } },
+                    { value: 342, name: '缺陷发现', itemStyle: { color: '#ef4444' } }
+                ]
+            }]
+        });
+        
+        // 10. 发布统计
+        const releaseChart = echarts.init(document.getElementById('releaseChart'));
+        releaseChart.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['发布次数', '成功率'], textStyle: { color: '#8892a0' } },
+            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'category', data: ['1月', '2月', '3月'], axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' } },
+            yAxis: [
+                { type: 'value', name: '次数', axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' }, splitLine: { lineStyle: { color: '#2d3748' } } },
+                { type: 'value', name: '成功率%', min: 90, max: 100, axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0', formatter: '{value}%' }, splitLine: { show: false } }
+            ],
+            series: [
+                { name: '发布次数', type: 'bar', data: [16, 15, 17], itemStyle: { color: '#3b82f6' }, barWidth: '40%' },
+                { name: '成功率', type: 'line', yAxisIndex: 1, data: [97.5, 98.2, 98.5], lineStyle: { color: '#10b981', width: 3 }, itemStyle: { color: '#10b981' }, symbol: 'circle', symbolSize: 8 }
+            ]
+        });
+        
+        // 11. 项目进展
+        const projectProgressChart = echarts.init(document.getElementById('projectProgressChart'));
+        projectProgressChart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            legend: { data: ['计划进度', '实际进度', '投入人力'], textStyle: { color: '#8892a0' } },
+            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'category', data: ['电商平台重构', '支付系统升级', '用户中心改版', '数据可视化平台', '移动端性能优化', '推荐算法迭代', '客服系统接入', '安全合规改造'], axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0', rotate: 15 } },
+            yAxis: [
+                { type: 'value', name: '进度%', max: 100, axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0', formatter: '{value}%' }, splitLine: { lineStyle: { color: '#2d3748' } } },
+                { type: 'value', name: '人力', axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' }, splitLine: { show: false } }
+            ],
+            series: [
+                { name: '计划进度', type: 'bar', data: [100, 95, 100, 85, 100, 70, 100, 90], itemStyle: { color: '#3b82f6', opacity: 0.6 }, barWidth: '30%' },
+                { name: '实际进度', type: 'bar', data: [98, 96, 100, 78, 100, 65, 100, 88], itemStyle: { color: '#10b981' }, barWidth: '30%' },
+                { name: '投入人力', type: 'line', yAxisIndex: 1, data: [12, 10, 6, 8, 5, 4, 5, 15], lineStyle: { color: '#f59e0b', width: 2 }, itemStyle: { color: '#f59e0b' }, symbol: 'diamond', symbolSize: 10 }
+            ]
+        });
+        
+        // 12. 效能热力图
+        const efficiencyHeatmapChart = echarts.init(document.getElementById('efficiencyHeatmapChart'));
+        const hours = ['周一', '周二', '周三', '周四', '周五'];
+        const weeks = ['第1周', '第2周', '第3周', '第4周', '第5周', '第6周', '第7周', '第8周', '第9周', '第10周', '第11周', '第12周'];
+        const heatmapData = [];
+        for (let i = 0; i < 12; i++) {
+            for (let j = 0; j < 5; j++) {
+                heatmapData.push([j, i, Math.floor(Math.random() * 40) + 60]);
+            }
+        }
+        efficiencyHeatmapChart.setOption({
+            tooltip: { position: 'top' },
+            grid: { height: '70%', top: '10%' },
+            xAxis: { type: 'category', data: hours, splitArea: { show: true, areaStyle: { color: '#1e2435' } }, axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' } },
+            yAxis: { type: 'category', data: weeks, splitArea: { show: true, areaStyle: { color: '#1e2435' } }, axisLine: { lineStyle: { color: '#2d3748' } }, axisLabel: { color: '#8892a0' } },
+            visualMap: { min: 60, max: 100, calculable: true, orient: 'horizontal', left: 'center', bottom: '0%', inRange: { color: ['#1e3a5f', '#3b82f6', '#10b981', '#f59e0b'] }, textStyle: { color: '#8892a0' } },
+            series: [{
+                type: 'heatmap',
+                data: heatmapData,
+                label: { show: true, color: '#fff' },
+                emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
+            }]
+        });
+        
+        // 响应式处理
+        window.addEventListener('resize', function() {
+            sprintTrendChart.resize();
+            teamStructureChart.resize();
+            levelDistributionChart.resize();
+            deptDistributionChart.resize();
+            stageMetricsChart.resize();
+            codeQualityChart.resize();
+            personalEfficiencyChart.resize();
+            deptComparisonChart.resize();
+            testExecutionChart.resize();
+            releaseChart.resize();
+            projectProgressChart.resize();
+            efficiencyHeatmapChart.resize();
+        });
+    </script>
+</body>
+</html>
