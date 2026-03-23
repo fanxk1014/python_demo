@@ -2,6 +2,9 @@ import re
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import json
+import os
+from datetime import datetime
 
 try:
     from paddleocr import PaddleOCR
@@ -25,6 +28,10 @@ class WaterElectricityCalculator:
     # OCR 行分组 Y 坐标阈值（像素）
     OCR_ROW_Y_THRESHOLD = 15
 
+    # 历史数据相关常量
+    HISTORY_FILE = "calculation_history.json"  # 历史数据保存文件
+    MAX_HISTORY_RECORDS = 10  # 最多保存10条历史记录
+
     # 账单字段映射规则（按优先级排序，具体关键词优先于模糊关键词）
     BILL_FIELD_MAPPING = [
         {"keyword": "电费分摊", "exclude": [], "fields": {"本期费用": "e_share"}},
@@ -42,14 +49,18 @@ class WaterElectricityCalculator:
     def __init__(self, root):
         """初始化计算器界面和参数"""
         self.root = root
-        self.root.title("两层楼水电费用分摊计算器（先算一楼+带计算过程）")
-        self.root.geometry("900x920")
+        self.root.title("两层楼水电费用分摊计算器（带历史数据管理）")
+        self.root.geometry("900x950")
 
         # 初始化输入控件（便于后续取值）
         self.input_widgets = {}
 
         # OCR 引擎懒加载
         self._ocr_engine = None
+
+        # 历史数据
+        self.history_data = []
+        self._load_history_data()
 
         # 创建主界面
         self._create_main_ui()
@@ -76,7 +87,10 @@ class WaterElectricityCalculator:
         calc_btn = ttk.Button(main_frame, text="计算费用", command=self.calculate_all)
         calc_btn.pack(pady=10)
 
-        # 5. 结果展示区
+        # 5. 历史数据管理按钮
+        self._create_history_buttons_area(main_frame)
+
+        # 6. 结果展示区
         self._create_result_display_area(main_frame)
 
     def _create_ocr_import_area(self, parent_frame):
@@ -218,6 +232,23 @@ class WaterElectricityCalculator:
         entry.grid(row=row, column=col + 1, pady=2)
 
         self.input_widgets[widget_key] = entry
+
+    def _create_history_buttons_area(self, parent_frame):
+        """创建历史数据管理按钮区域"""
+        frame = ttk.LabelFrame(parent_frame, text="历史数据管理", padding=10)
+        frame.pack(fill=tk.X, pady=5)
+
+        # 查看历史按钮
+        self.history_btn = ttk.Button(frame, text="查看历史记录", command=self._show_history_dialog)
+        self.history_btn.grid(row=0, column=0, padx=(0, 10))
+
+        # 清除当前数据按钮
+        self.clear_btn = ttk.Button(frame, text="清除当前数据", command=self._clear_current_data)
+        self.clear_btn.grid(row=0, column=1, padx=(0, 10))
+
+        # 状态标签
+        self.history_status_label = ttk.Label(frame, text="", foreground="gray")
+        self.history_status_label.grid(row=0, column=2, sticky=tk.W)
 
     def _get_input_value(self, key):
         """
@@ -641,6 +672,229 @@ class WaterElectricityCalculator:
         self._ocr_error_text.delete(1.0, tk.END)
         self._ocr_error_text.config(state=tk.DISABLED)
 
+    # ==================== 历史数据管理相关方法 ====================
+
+    def _load_history_data(self):
+        """从文件加载历史数据"""
+        try:
+            if os.path.exists(self.HISTORY_FILE):
+                with open(self.HISTORY_FILE, 'r', encoding='utf-8') as f:
+                    self.history_data = json.load(f)
+            else:
+                self.history_data = []
+        except Exception as e:
+            print(f"加载历史数据失败: {e}")
+            self.history_data = []
+
+    def _save_history_data(self):
+        """保存历史数据到文件"""
+        try:
+            with open(self.HISTORY_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.history_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存历史数据失败: {e}")
+
+    def _save_current_calculation(self, floor1_total, floor2_total):
+        """保存当前计算结果到历史数据"""
+        # 收集当前输入数据
+        current_data = {
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "inputs": {},
+            "results": {
+                "floor1_total": floor1_total,
+                "floor2_total": floor2_total
+            }
+        }
+
+        # 保存所有输入值
+        for key, widget in self.input_widgets.items():
+            value = widget.get().strip()
+            if value:
+                try:
+                    current_data["inputs"][key] = float(value)
+                except ValueError:
+                    current_data["inputs"][key] = value
+
+        # 添加到历史数据开头
+        self.history_data.insert(0, current_data)
+
+        # 只保留最近10条记录
+        if len(self.history_data) > self.MAX_HISTORY_RECORDS:
+            self.history_data = self.history_data[:self.MAX_HISTORY_RECORDS]
+
+        # 保存到文件
+        self._save_history_data()
+
+        # 更新状态
+        self.history_status_label.config(text=f"已保存当前计算结果（共{len(self.history_data)}条历史记录）")
+
+    def _show_history_dialog(self):
+        """显示历史记录对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("历史计算记录")
+        dialog.geometry("600x500")
+        dialog.transient(self.root)  # 设为父窗口的临时窗口
+        dialog.grab_set()  # 模态窗口
+
+        # 主框架
+        main_frame = ttk.Frame(dialog, padding=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 标题
+        title_label = ttk.Label(main_frame, text=f"历史计算记录（最多{self.MAX_HISTORY_RECORDS}条）", font=('Arial', 12, 'bold'))
+        title_label.pack(pady=(0, 10))
+
+        if not self.history_data:
+            no_data_label = ttk.Label(main_frame, text="暂无历史记录", foreground="gray")
+            no_data_label.pack(pady=20)
+            return
+
+        # 历史记录列表框架
+        list_frame = ttk.Frame(main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 创建滚动条
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 创建列表框
+        history_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, font=('Consolas', 10))
+        history_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=history_listbox.yview)
+
+        # 填充历史记录
+        for i, record in enumerate(self.history_data):
+            date = record.get('date', '未知时间')
+            floor1_total = record.get('results', {}).get('floor1_total', 0)
+            floor2_total = record.get('results', {}).get('floor2_total', 0)
+            history_listbox.insert(tk.END, f"{i+1}. {date} - 一楼: {floor1_total:.2f}元, 二楼: {floor2_total:.2f}元")
+
+        # 按钮框架
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=10)
+
+        # 查看详情按钮
+        def view_details():
+            selection = history_listbox.curselection()
+            if selection:
+                index = selection[0]
+                self._show_record_details(self.history_data[index])
+
+        view_btn = ttk.Button(button_frame, text="查看详情", command=view_details)
+        view_btn.grid(row=0, column=0, padx=5)
+
+        # 加载数据按钮
+        def load_data():
+            selection = history_listbox.curselection()
+            if selection:
+                index = selection[0]
+                self._load_history_record(self.history_data[index])
+                dialog.destroy()
+
+        load_btn = ttk.Button(button_frame, text="加载数据", command=load_data)
+        load_btn.grid(row=0, column=1, padx=5)
+
+        # 删除记录按钮
+        def delete_record():
+            selection = history_listbox.curselection()
+            if selection:
+                index = selection[0]
+                if messagebox.askyesno("确认删除", "确定要删除这条历史记录吗？"):
+                    self.history_data.pop(index)
+                    self._save_history_data()
+                    dialog.destroy()
+                    self._show_history_dialog()  # 重新打开对话框
+
+        delete_btn = ttk.Button(button_frame, text="删除记录", command=delete_record)
+        delete_btn.grid(row=0, column=2, padx=5)
+
+        # 清空所有记录按钮
+        def clear_all():
+            if messagebox.askyesno("确认清空", f"确定要清空所有{len(self.history_data)}条历史记录吗？"):
+                self.history_data.clear()
+                self._save_history_data()
+                dialog.destroy()
+
+        clear_all_btn = ttk.Button(button_frame, text="清空所有", command=clear_all)
+        clear_all_btn.grid(row=0, column=3, padx=5)
+
+        # 关闭按钮
+        close_btn = ttk.Button(button_frame, text="关闭", command=dialog.destroy)
+        close_btn.grid(row=0, column=4, padx=5)
+
+    def _show_record_details(self, record):
+        """显示单条记录的详细信息"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("历史记录详情")
+        dialog.geometry("500x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        main_frame = ttk.Frame(dialog, padding=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 日期标题
+        date_label = ttk.Label(main_frame, text=f"计算时间: {record.get('date', '未知')}", font=('Arial', 11, 'bold'))
+        date_label.pack(pady=(0, 10))
+
+        # 创建文本框显示详细信息
+        text_frame = ttk.Frame(main_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(text_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        text_widget = tk.Text(text_frame, yscrollcommand=scrollbar.set, font=('Consolas', 10))
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=text_widget.yview)
+
+        # 填充详细信息
+        text_widget.insert(tk.END, "=== 计算结果 ===\n")
+        results = record.get('results', {})
+        text_widget.insert(tk.END, f"一楼总费用: {results.get('floor1_total', 0):.2f}元\n")
+        text_widget.insert(tk.END, f"二楼总费用: {results.get('floor2_total', 0):.2f}元\n\n")
+
+        text_widget.insert(tk.END, "=== 输入数据 ===\n")
+        inputs = record.get('inputs', {})
+        for key, value in inputs.items():
+            text_widget.insert(tk.END, f"{key}: {value}\n")
+
+        text_widget.config(state=tk.DISABLED)
+
+        # 关闭按钮
+        close_btn = ttk.Button(main_frame, text="关闭", command=dialog.destroy)
+        close_btn.pack(pady=10)
+
+    def _load_history_record(self, record):
+        """加载历史记录到当前输入框"""
+        inputs = record.get('inputs', {})
+        for key, value in inputs.items():
+            if key in self.input_widgets:
+                widget = self.input_widgets[key]
+                widget.delete(0, tk.END)
+                widget.insert(0, str(value))
+
+        self.history_status_label.config(text=f"已加载 {record.get('date', '')} 的数据")
+
+    def _clear_current_data(self):
+        """清除当前输入的数据"""
+        if messagebox.askyesno("确认清除", "确定要清除所有当前输入的数据吗？"):
+            for widget in self.input_widgets.values():
+                widget.delete(0, tk.END)
+
+            # 清除结果显示
+            self.floor1_text.config(state=tk.NORMAL)
+            self.floor1_text.delete(1.0, tk.END)
+            self.floor1_text.insert(tk.END, "一楼费用明细（含计算过程）:\n\n")
+            self.floor1_text.config(state=tk.DISABLED)
+
+            self.floor2_text.config(state=tk.NORMAL)
+            self.floor2_text.delete(1.0, tk.END)
+            self.floor2_text.insert(tk.END, "二楼费用明细（含计算过程）:\n\n")
+            self.floor2_text.config(state=tk.DISABLED)
+
+            self.history_status_label.config(text="已清除当前数据")
+
     # ==================== 计算相关方法 ====================
 
     def calculate_all(self):
@@ -658,6 +912,21 @@ class WaterElectricityCalculator:
 
             # 4. 更新结果展示（传入所有过程数据）
             self._update_result_display(floor1_usage_data, fixed_cost_data, usage_cost_data)
+
+            # 5. 保存到历史数据
+            w1_usage, e1_usage, w1_last, w1_current, e1_last, e1_current = floor1_usage_data
+            (f1_manage, f1_e_share, f1_w_share, f1_elevator, f1_stair), \
+                (f2_manage, f2_e_share, f2_w_share, f2_elevator, f2_stair), \
+                (manage_total, e_share_total, w_share_total, elevator_total, stair_total) = fixed_cost_data
+            (f1_electric_base, f1_electric_loss, f1_water), \
+                (f2_electric_base, f2_electric_loss, f2_water), _, _ = usage_cost_data
+
+            f1_total = sum([f1_manage, f1_e_share, f1_w_share, f1_elevator, f1_stair,
+                            f1_electric_base, f1_electric_loss, f1_water])
+            f2_total = sum([f2_manage, f2_e_share, f2_w_share, f2_elevator, f2_stair,
+                            f2_electric_base, f2_electric_loss, f2_water])
+
+            self._save_current_calculation(f1_total, f2_total)
 
         except Exception as e:
             messagebox.showerror("计算异常", f"请检查输入数据:\n{str(e)}")
